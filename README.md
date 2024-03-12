@@ -1,0 +1,2 @@
+# DouDiZhuFuZhuQi
+用pygame写的一款非常不好用的斗地主辅助器
