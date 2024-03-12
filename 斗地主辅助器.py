@@ -42,7 +42,7 @@ card_dict = [3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8
              'J', 'J', 'J', 'J', 'Q', 'Q', 'Q', 'Q', 'K', 'K', 'K', 'K',
              'A', 'A', 'A', 'A', 2, 2, 2, 2, "小王", "大王"]
 card_dict_2 = {3:0, 4:1, 5:2, 6:3, 7:4, 8:5, 9:6, 10:7, 'J':8, 'Q':9, 'K':10, 'A':11, 2:12, "小王":13, "大王":14}
-card_dict_3 = [3, 4, 5, 6, 7, 8, 9, 10, 'J', 'Q', 'K', 'A', 2, "小王", "大王"]
+card_dict_3 = ['3', '4', '5', '6', '7', '8', '9', "10", 'J', 'Q', 'K', 'A', '2', "小王", "大王"]
 
 class Card:
     def __init__(self, value, width, height, owner, p):
@@ -86,6 +86,26 @@ class All_cards:
             pygame.draw.line(screen, (0, 0, 0), (int(i * cards_width / 7)+pos[0], pos[1]),
                              (int(i * cards_width / 7)+pos[0], cards_height * 15+pos[1]))
 
+    def choose(self, x, y, is_selected):
+        self.all_cards[y // cards_height].choose(x, is_selected)
+
+    def run(self, player):
+        running_cards = []
+        for i in range(15):
+            self.all_cards[i].run(running_cards, player)
+        return running_cards
+
+    def change_p(self, card, value, player, index):
+        # 参数1：要改变概率的牌
+        # 参数2：要改变的概率
+        # 参数3：出牌的人
+        # 参数4：要改变的牌的 state 值的大小顺序
+        if player == 1:
+            self.all_cards[card].change_p(value, index)
+        else:
+            self.all_cards[card].change_p(-value, -index-1)
+
+
 class Cards:
     def __init__(self, value, width, height, num):
         self.value = value
@@ -93,7 +113,8 @@ class Cards:
         self.width = width
         self.height = height
         self.num = num
-        self.state = [3] * num
+        self.state = [3.] * num
+        self.selecting = [0] * num
         """
         state:
             0:上家已出
@@ -111,13 +132,13 @@ class Cards:
         for i in range(self.num):
             if self.state[i] == 3:
                 self.state[i] = 5 if landowner == 1 else 1
+                self.update_surface()
                 break
 
     def show(self, screen, pos):
         screen.blit(self.surface, pos)
 
     def update_surface(self):
-        self.sort()
         now_area = -1
         self.surface.fill((255, 255, 255))
         for i in range(self.num):
@@ -128,9 +149,74 @@ class Cards:
                 pos_x += card_width
 
             self.surface.blit(self.card_font, (int(now_area * cards_width / 7 + pos_x), 0))
+            if self.selecting[i]:
+                pygame.draw.rect(self.surface, (0, 0, 255), (int(now_area * cards_width / 7 + pos_x), 0, 20, 20), 1)
 
-    def sort(self):#####################################################################
-        pass
+    def sort(self):
+        for i in range(self.num):
+            for j in range(self.num - 1):
+                if self.state[j] > self.state[j + 1]:
+                    self.state[j], self.state[j + 1] = self.state[j + 1], self.state[j]
+                    self.selecting[j], self.selecting[j + 1] = self.selecting[j + 1], self.selecting[j]
+        self.update_surface()
+
+    def choose(self, x, is_selected):
+        choose_area = x // (cards_width / 7)
+        for i in range(self.num):
+            if int(self.state[i]) >= choose_area:
+                break
+        i += int((x % (cards_width / 7)) / card_width)
+        if i < self.num and int(self.state[i]) == choose_area and choose_area != 0 and choose_area != 6:
+            self.selecting[i] = is_selected
+        self.update_surface()
+
+    def run(self, running_cards, player):
+        for i in range(self.num):
+            if self.selecting[i]:
+                running_cards.append(self.value)
+                self.selecting[i] = 0
+                if player == 1:
+                    self.state[i] = 6
+                elif player == 2:
+                    self.state[i] = 0
+        self.sort()
+
+    def change_p(self, value, index):
+        i = 0
+        if index >= 0:
+            for i in range(self.num):
+                if self.state[i] != 0:
+                    if (0 <= i + index < self.num) and 2 <= self.state[i + index] < 5:
+                        self.state[i + index] += value
+                        if self.state[i + index] >= 5:
+                            self.state[i + index] = 4.9
+                        if self.state[i + index] < 2:
+                            self.state[i + index] = 2
+                        if 3 < self.state[i + index] < 4:
+                            if value > 0:
+                                self.state[i + index] += 0.9
+                            elif value < 0:
+                                self.state[i + index] -= 0.9
+                    break
+        else:
+            for i in range(self.num - 1, -1, -1):
+                if self.state[i] != 6:
+                    index += 1
+                    if (0 <= i + index < self.num) and 2 <= self.state[i + index] < 5:
+                        self.state[i + index] += value
+                        if self.state[i + index] >= 5:
+                            self.state[i + index] = 4.9
+                        if self.state[i + index] < 2:
+                            self.state[i + index] = 2
+                        if 3 < self.state[i + index] < 4:
+                            if value > 0:
+                                self.state[i + index] += 0.9
+                            elif value < 0:
+                                self.state[i + index] -= 0.9
+                    break
+
+        self.sort()
+
 
 class Player:
     def __init__(self, player, is_landowner):
@@ -139,10 +225,7 @@ class Player:
         self.is_landowner = is_landowner
         self.surface = pygame.Surface((80, 60))
         self.update_surface()
-
-    def reduce_card_num(self, num):
-        self.card_num -= num
-        self.update_surface()
+        self.run_cards = []  # 已经出过的牌
 
     def update_surface(self):
         self.surface.fill((255, 255, 255))
@@ -155,10 +238,78 @@ class Player:
         screen.blit(self.surface, pos)
         if turn == self.player:
             pygame.draw.rect(screen, (0, 0, 255), (pos[0], pos[1], 80, 60), 3)
+        for i in range(len(self.run_cards)):
+            screen.blit(font.render(self.run_cards[i], True, (0, 0, 0)), (pos[0], pos[1]+i*20+70))
 
     def run(self, all_cards):
         # 出牌
-        pass
+        running_cards = all_cards.run(self.player)
+        self.card_num -= len(running_cards)
+        self.update_surface()
+
+        s = ""
+        for i in range(len(running_cards)):
+            s += card_dict_3[running_cards[i]]
+        self.run_cards.append(s)
+
+        # 检测出牌类型，并修改概率
+        cards_hash = [0] * 15
+        for i in range(len(running_cards)):
+            cards_hash[running_cards[i]] += 1
+        nums_hash = [0] * 5
+        for i in range(15):
+            nums_hash[cards_hash[i]] += 1
+
+        # 单张
+        if nums_hash[1] == 1 and nums_hash[2] == 0 and nums_hash[3] == 0 and nums_hash[4] == 0:
+            for i in range(13):
+                if cards_hash[i]:
+                    all_cards.change_p(i, -0.1, self.player, 0)
+                    break
+            if cards_hash[13]:
+                all_cards.change_p(14, -0.1, self.player, 0)
+            if cards_hash[14]:
+                all_cards.change_p(13, -0.1, self.player, 0)
+        # 对子
+        if nums_hash[1] == 0 and nums_hash[2] == 1 and nums_hash[3] == 0 and nums_hash[4] == 0:
+            for i in range(13):
+                if cards_hash[i]:
+                    all_cards.change_p(i, -0.1, self.player, 0)
+                    all_cards.change_p(i, -0.1, self.player, 1)
+                    break
+
+        # 三带一
+        if nums_hash[1] == 1 and nums_hash[2] == 0 and nums_hash[3] == 1 and nums_hash[4] == 0:
+            for i in range(13):
+                if cards_hash[i] == 3:
+                    all_cards.change_p(i, -0.3, self.player, 0)
+                if cards_hash[i] == 1:
+                    all_cards.change_p(i, -0.1, self.player, 0)
+
+        # 三带二
+        if nums_hash[1] == 0 and nums_hash[2] == 1 and nums_hash[3] == 1 and nums_hash[4] == 0:
+            for i in range(13):
+                if cards_hash[i] == 3:
+                    all_cards.change_p(i, -0.3, self.player, 0)
+                if cards_hash[i] == 2:
+                    all_cards.change_p(i, -0.1, self.player, 0)
+                    all_cards.change_p(i, -0.1, self.player, 1)
+
+        # 顺子
+        if nums_hash[1] >= 5 and nums_hash[2] == 0 and nums_hash[3] == 0 and nums_hash[4] == 0:
+            for i in range(8):  # 最多就是从10开始
+                if cards_hash[i]:
+                    if i > 0:
+                        all_cards.change_p(i-1, -0.1, self.player, 0)
+                    if i+nums_hash[1] < 12:
+                        all_cards.change_p(i+nums_hash[1], -0.1, self.player, 0)
+                    break
+
+        # 连对
+        if nums_hash[1] == 0 and nums_hash[2] >= 3 and nums_hash[3] == 0 and nums_hash[4] == 0:
+            for i in range(10):  # 最多就是从Q开始
+                if cards_hash[i]:
+                    all_cards.change_p(i, -0.1, self.player, 0)
 
 
 class Player_0(Player):
@@ -177,8 +328,10 @@ class Player_0(Player):
         for i in range(len(self.selecting_cards)-1, -1, -1):
             if self.selecting_cards[i]:
                 self.cards.pop(i)
+                self.card_num -= 1
         self.selecting_cards = [0] * len(self.cards)
         self.update_cards_surface()
+        self.update_surface()
 
     def update_cards_surface(self):
         self.cards_surface.fill((255, 255, 255))
@@ -220,62 +373,8 @@ class Player_0(Player):
         self.update_cards_surface()
 
 
-
 # 开始
 def state_0():
-    running = True
-    landowner = -1
-    while running:
-        for event in pygame.event.get():
-            if event.type == QUIT:
-                running = False
-                pygame.quit()
-                sys.exit()
-            elif event.type == MOUSEBUTTONDOWN:
-                # 如果点击按钮，就更改地主
-                if 150 <= event.pos[0] <= 250:
-                    if 200 <= event.pos[1] <= 250:
-                        landowner = 0
-                    elif 250 <= event.pos[1] <= 300:
-                        landowner = 1
-                    elif 300 <= event.pos[1] <= 350:
-                        landowner = 2
-
-                # 如果点击开始，就进入下一个状态
-                if 20 <= event.pos[0] <= 125 and 500 <=  event.pos[1] <= 545:
-                    if landowner != -1:
-                        state_1(landowner)
-
-        screen.fill((255, 255, 255))
-        screen.blit(font.render("斗地主辅助器", True, (0, 0, 0)), (20, 20))
-        screen.blit(font.render("选择地主", True, (0, 0, 0)), (20, 200))
-
-        # 高亮地主填充红色
-        if landowner == 0:
-            pygame.draw.rect(screen, (255, 0, 0), (150, 200, 100, 50))
-        elif landowner == 1:
-            pygame.draw.rect(screen, (255, 0, 0), (150, 250, 100, 50))
-        elif landowner == 2:
-            pygame.draw.rect(screen, (255, 0, 0), (150, 300, 100, 50))
-
-        # 绘制三个按钮来选择地主
-        screen.blit(font.render("本家", True, (0, 0, 0)), (180, 210))
-        screen.blit(font.render("下家", True, (0, 0, 0)), (180, 260))
-        screen.blit(font.render("上家", True, (0, 0, 0)), (180, 310))
-        pygame.draw.rect(screen, (0, 0, 0), (150, 200, 100, 50), 2)
-        pygame.draw.rect(screen, (0, 0, 0), (150, 250, 100, 50), 2)
-        pygame.draw.rect(screen, (0, 0, 0), (150, 300, 100, 50), 2)
-
-        # 绘制开始游戏按钮
-        screen.blit(font.render("开始游戏", True, (0, 0, 0)), (30, 510))
-        pygame.draw.rect(screen, (0, 0, 0), (20, 500, 105, 45), 2)
-
-        # 更新屏幕
-        pygame.display.flip()
-        clock.tick(60)
-
-
-def state_1(landowner):
     running = True
     selected_cards = [0] * 54
     selected_cards_landowner = [0] * 54
@@ -306,7 +405,7 @@ def state_1(landowner):
 
                     if 55 < event.pos[0] < 110 and 200 < event.pos[1] < 230:
                         running = False
-                        state_2(landowner, selected_cards, selected_cards_landowner)
+                        state_1(selected_cards, selected_cards_landowner)
                     if 115 < event.pos[0] < 170 and 200 < event.pos[1] < 230:
                         for i in range(54):
                             selected_cards[i] = 0
@@ -355,6 +454,59 @@ def state_1(landowner):
             screen.blit(font.render(str(card_dict[i]), True, (0, 0, 0)), (20 + i // 4 * 50, 150 - i % 4 * 30))
 
         # 刷新屏幕
+        pygame.display.flip()
+        clock.tick(60)
+
+
+def state_1(selected_cards, selected_cards_landowner):
+    running = True
+    landowner = -1
+    while running:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                running = False
+                pygame.quit()
+                sys.exit()
+            elif event.type == MOUSEBUTTONDOWN:
+                # 如果点击按钮，就更改地主
+                if 150 <= event.pos[0] <= 250:
+                    if 200 <= event.pos[1] <= 250:
+                        landowner = 0
+                    elif 250 <= event.pos[1] <= 300:
+                        landowner = 1
+                    elif 300 <= event.pos[1] <= 350:
+                        landowner = 2
+
+                # 如果点击开始，就进入下一个状态
+                if 20 <= event.pos[0] <= 125 and 500 <=  event.pos[1] <= 545:
+                    if landowner != -1:
+                        state_2(landowner, selected_cards, selected_cards_landowner)
+
+        screen.fill((255, 255, 255))
+        screen.blit(font.render("斗地主辅助器", True, (0, 0, 0)), (20, 20))
+        screen.blit(font.render("选择地主", True, (0, 0, 0)), (20, 200))
+
+        # 高亮地主填充红色
+        if landowner == 0:
+            pygame.draw.rect(screen, (255, 0, 0), (150, 200, 100, 50))
+        elif landowner == 1:
+            pygame.draw.rect(screen, (255, 0, 0), (150, 250, 100, 50))
+        elif landowner == 2:
+            pygame.draw.rect(screen, (255, 0, 0), (150, 300, 100, 50))
+
+        # 绘制三个按钮来选择地主
+        screen.blit(font.render("本家", True, (0, 0, 0)), (180, 210))
+        screen.blit(font.render("下家", True, (0, 0, 0)), (180, 260))
+        screen.blit(font.render("上家", True, (0, 0, 0)), (180, 310))
+        pygame.draw.rect(screen, (0, 0, 0), (150, 200, 100, 50), 2)
+        pygame.draw.rect(screen, (0, 0, 0), (150, 250, 100, 50), 2)
+        pygame.draw.rect(screen, (0, 0, 0), (150, 300, 100, 50), 2)
+
+        # 绘制开始游戏按钮
+        screen.blit(font.render("开始游戏", True, (0, 0, 0)), (30, 510))
+        pygame.draw.rect(screen, (0, 0, 0), (20, 500, 105, 45), 2)
+
+        # 更新屏幕
         pygame.display.flip()
         clock.tick(60)
 
@@ -411,6 +563,12 @@ def state_2(landowner, selected_cards, selected_cards_landowner):
                 player_0.choose(pos[0] - player_0_cards_pos[0], 1)
             if mouse_right_down:
                 player_0.choose(pos[0] - player_0_cards_pos[0], 0)
+        if all_cards_pos[0] < pos[0] < all_cards_pos[0] + cards_width and \
+           all_cards_pos[1] < pos[1] < all_cards_pos[1] + cards_height * 15:
+            if mouse_left_down:
+                all_cards.choose(pos[0] - all_cards_pos[0], pos[1] - all_cards_pos[1], 1)
+            if mouse_right_down:
+                all_cards.choose(pos[0] - all_cards_pos[0], pos[1] - all_cards_pos[1], 0)
 
         screen.fill((255, 255, 255))
 
